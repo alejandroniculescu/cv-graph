@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#e8ecf1;
+    --ink-dim:#8b96a5;
+    --ink-faint:#5b6472;
+    --canvas:#0d1117;
+    --panel:#141a22;
+    --panel-border:#232b36;
+    --hairline:#2a323e;
+    --root:#f2c879;
+    --research:#4fd1c5;
+    --research-dim:#2c6e69;
+    --industry:#e8a33d;
+    --industry-dim:#7a5a25;
+    --military:#c9705a;
+    --military-dim:#6e3e32;
+    --education:#a688e0;
+    --education-dim:#54406e;
+    --publications:#d88bb0;
+    --publications-dim:#6e405a;
+    --additional:#7d8898;
+    --additional-dim:#454c56;
+    --thread:#f2c879;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--canvas);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, sans-serif;
+    overflow:hidden;
+    height:100vh;
+    width:100vw;
+  }
+
+  .app{position:relative; height:100vh; width:100vw;}
+
+  svg#graph{position:absolute; inset:0; width:100%; height:100%; cursor:grab;}
+  svg#graph:active{cursor:grabbing;}
+
+  .topbar{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    padding:22px 26px;
+    pointer-events:none;
+    z-index:5;
+  }
+  .brand{pointer-events:auto;}
+  .brand h1{
+    font-family:"Fraunces", serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:0.01em;
+    margin:0 0 3px 0;
+    color:var(--ink);
+  }
+  .brand p{
+    margin:0;
+    font-size:12.5px;
+    color:var(--ink-dim);
+    max-width:360px;
+    line-height:1.5;
+  }
+  .brand .name{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--root);
+    margin:0 0 8px 0;
+  }
+
+  .controls{
+    pointer-events:auto;
+    display:flex; flex-direction:column; align-items:flex-end; gap:10px;
+  }
+  #search{
+    width:220px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    color:var(--ink);
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    padding:9px 12px;
+    outline:none;
+  }
+  #search::placeholder{color:var(--ink-faint);}
+  #search:focus{border-color:var(--root);}
+
+  .legend{
+    display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px;
+    max-width:320px;
+  }
+  .chip{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:999px;
+    padding:5px 10px 5px 8px;
+    font-size:11px;
+    color:var(--ink-dim);
+    cursor:pointer;
+    user-select:none;
+    transition:opacity .15s ease, border-color .15s ease;
+  }
+  .chip:hover{border-color:var(--hairline);}
+  .chip.off{opacity:0.35;}
+  .chip .dot{width:8px; height:8px; border-radius:50%; flex:none;}
+
+  .hint{
+    position:absolute; bottom:18px; left:26px;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10.5px;
+    color:var(--ink-faint);
+    letter-spacing:0.03em;
+    pointer-events:none;
+    z-index:5;
+  }
+
+  .panel{
+    position:absolute; top:0; right:0; bottom:0;
+    width:340px;
+    background:var(--panel);
+    border-left:1px solid var(--panel-border);
+    padding:26px 24px;
+    transform:translateX(100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    overflow-y:auto;
+    z-index:10;
+  }
+  .panel.open{transform:translateX(0);}
+  .panel-close{
+    position:absolute; top:20px; right:20px;
+    background:none; border:none; color:var(--ink-faint);
+    font-size:18px; cursor:pointer; line-height:1;
+    font-family:"IBM Plex Mono", monospace;
+  }
+  .panel-close:hover{color:var(--ink);}
+  .panel-eyebrow{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin:0 0 10px 0;
+    display:flex; align-items:center; gap:7px;
+  }
+  .panel-eyebrow .dot{width:8px; height:8px; border-radius:50%;}
+  .panel h2{
+    font-family:"Fraunces", serif;
+    font-weight:600;
+    font-size:21px;
+    line-height:1.25;
+    margin:0 0 6px 0;
+    text-wrap:balance;
+    padding-right:20px;
+  }
+  .panel .dates{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11.5px;
+    color:var(--ink-dim);
+    margin:0 0 18px 0;
+  }
+  .panel .detail{
+    font-size:13.5px;
+    line-height:1.65;
+    color:#c7ceda;
+    margin:0 0 20px 0;
+  }
+  .panel .rel-label{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin:0 0 8px 0;
+  }
+  .rel-list{list-style:none; margin:0 0 4px 0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .rel-list li{
+    font-size:12.5px;
+    color:var(--ink-dim);
+    padding:7px 10px;
+    border:1px solid var(--hairline);
+    border-radius:6px;
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  .rel-list li:hover{border-color:var(--root); color:var(--ink);}
+
+  text.node-label{
+    font-family:"IBM Plex Sans", sans-serif;
+    fill:var(--ink);
+    pointer-events:none;
+    paint-order:stroke;
+    stroke:var(--canvas);
+    stroke-width:3px;
+    stroke-linejoin:round;
+  }
+  text.node-label.root-label{
+    font-family:"Fraunces", serif;
+    font-weight:600;
+  }
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--hairline); border-radius:4px;}
+
+  @media (max-width: 720px){
+    .brand p{display:none;}
+    .legend{max-width:180px;}
+    .panel{width:88vw;}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <svg id="graph"></svg>
+
+  <div class="topbar">
+    <div class="brand">
+      <p class="name">Alexander L. Niculescu</p>
+      <h1>Signal Graph</h1>
+      <p>Roles, projects, and training rendered as a graph — the same way the research itself links words to brain regions. Drag nodes, scroll to zoom, click anything for detail.</p>
+    </div>
+    <div class="controls">
+      <input id="search" type="text" placeholder="Find a node…" autocomplete="off">
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <div class="hint">Solid = belongs to · dotted = career sequence · dashed = shared technique</div>
+
+  <div class="panel" id="panel">
+    <button class="panel-close" id="panelClose">✕</button>
+    <p class="panel-eyebrow"><span class="dot" id="panelDot"></span><span id="panelGroup"></span></p>
+    <h2 id="panelTitle"></h2>
+    <p class="dates" id="panelDates"></p>
+    <p class="detail" id="panelDetail"></p>
+    <div id="panelRel"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const GROUP_META = {
+  root:          { label: "Center",              color: "var(--root)" },
+  research:      { label: "Research — TU Berlin", color: "var(--research)" },
+  "research-sub":{ label: "Research — TU Berlin", color: "var(--research)" },
+  industry:      { label: "Industry & Contracting", color: "var(--industry)" },
+  "industry-sub":{ label: "Industry & Contracting", color: "var(--industry)" },
+  military:      { label: "Military Service",     color: "var(--military)" },
+  education:     { label: "Education & Training", color: "var(--education)" },
+  "education-sub":{ label: "Education & Training", color: "var(--education)" },
+  publications:  { label: "Publications",         color: "var(--publications)" },
+  additional:    { label: "Additional",           color: "var(--additional)" },
+};
+
+const nodes = [
+  { id:"root", group:"root", label:"Alexander L. Niculescu", dates:"", detail:"Builder & researcher — voice biomarkers for early neurodegeneration detection. Currently Associate Researcher, AHMS Lab, TU Berlin." },
+
+  { id:"tub", group:"research", label:"TU Berlin — AHMS Lab", dates:"Aug 2026 – Present", detail:"Associate Researcher under PI Dr. Hughes, Age-Appropriate Human-Machine Systems Lab. Voice-biomarker SaaS and hardware implementation of neurodegenerative disease detection." },
+  { id:"vbp", group:"research", label:"Voice Biomarker Pipeline", dates:"2026 – Present", detail:"Independent research, continued at TU Berlin AHMS. A three-repo pipeline turning raw speech recordings into a longitudinal neurodegeneration risk signal — production ETL, an earlier research prototype, and downstream classification. Next: passive wearable hardware for capture, a weekly-cadence SaaS check-in product, and a speech-to-face adaptation fusing vocal and facial biomarkers — in conversations with incubators, investors, research institutes, a wearable/headphone integration, and a clinic pilot." },
+  { id:"etl", group:"research-sub", parent:"vbp", label:"ETL & Feature Extraction", dates:"regina_etl", detail:"Raw .wav → Whisper transcription, prosody/pause/voice-quality and part-of-speech features, plus 768-d wav2vec2 and 256-d Resemblyzer embeddings. Orchestrated end-to-end with Prefect, experiment-tracked in MLflow, content-hash cached." },
+  { id:"spk", group:"research-sub", parent:"vbp", label:"Speaker Verification", dates:"regina_etl", detail:"Resemblyzer d-vector matching keeps non-patient audio from corrupting a subject's longitudinal baseline. Future extension: flag when specific other voices or sounds correlate with distress spikes, as a trigger-detection feature." },
+  { id:"graphdb", group:"research-sub", parent:"vbp", label:"Neo4j Brain-Region Graph", dates:"reginaSpectogram", detail:"12-feature acoustic/linguistic/affective model with Mahalanobis-distance drift detection against each speaker's own baseline. Persisted to Neo4j: words → POS tags → hypothesized brain regions (Broca's BA44/45, basal ganglia/nigrostriatal pathway, Wernicke's area), each edge tagged by citation and confidence." },
+  { id:"clf", group:"research-sub", parent:"vbp", label:"Classifier Experiments", dates:"regina_analysis", detail:"Five models — Bagging, XGBoost, MLP, Random Forest, SVM — benchmarked head-to-head via nested cross-validation with ExtraTreesClassifier feature selection. Structured literature synthesis of PD/AD speech-detection research." },
+
+  { id:"labrador", group:"industry", label:"Labrador Data Retrieval LLC", dates:"2016 – Present", detail:"Founder & Lead Engineer, own contracting umbrella company — every placement below runs through it. Direct engagement since 2020: cut automated ETL processing time ~80% via a sliding-window redesign and concurrency optimization, then hardened it with Firestore integration and end-to-end tests; led analysts automating SQL pipelines and dashboards across Data Studio, Salesforce, and Looker." },
+  { id:"maven", group:"industry-sub", parent:"labrador", label:"Project Maven", dates:"Feb 2019 – Feb 2020", detail:"ML Engineer (subcontract). Built and ran a YOLO/TensorFlow/RabbitMQ inference pipeline on CI/CD-managed clusters (Docker, Conda, Jenkins) serving real-time model outputs to 1,000+ agents and soldiers in the field." },
+  { id:"jido", group:"industry-sub", parent:"labrador", label:"JIDO", dates:"Jan 2018 – Feb 2019", detail:"Data Engineer (subcontract). Applied BERT — released only months earlier — for language understanding, ahead of its widespread industry adoption. Retired a legacy Apache Storm system by migrating it to Kafka and Spark." },
+  { id:"darpa", group:"industry-sub", parent:"labrador", label:"DARPA GRAPHS & Simplex", dates:"2016 – 2018", detail:"Systems Engineer (subcontract). Containerized incompatible research code (C, R, and others) from UMD, JHU, Columbia, Baylor, and UCLA into one shared sandbox. With JHU: SSD-backed caching of sparse graph matrices, an out-of-core technique. With UMD: graph subsampling for sparse graph detection." },
+  { id:"wwe", group:"industry-sub", parent:"labrador", label:"WWE", dates:"2016 – 2017", detail:"Data Engineer (subcontract). Rebuilt WWE's ETL and analytics stack from the ground up." },
+  { id:"ibm", group:"industry-sub", parent:"labrador", label:"IBM (DoD clients)", dates:"2016 – 2018", detail:"Solutions Engineer (subcontract). Deployed IBM Watson and cloud/server software on-site for cleared DoD clients, ramping up on IBM's internal products fast enough to deliver without a hand-off team." },
+  { id:"fund", group:"industry", label:"Private Investment Fund", dates:"2020 – Present", detail:"Fund Manager. Oversee portfolio strategy and investor relations. (Details available under NDA.)" },
+  { id:"techstars", group:"industry", label:"Techstars Miami", dates:"2022 – Present", detail:"Advisor / Lead Mentor to pre-seed through Series A founders on product, engineering, R&D, and investor communication. Portfolio: Dashdive (YC W23), Don't Worry (YC '24), VictusAI (Techstars '24), Kindle (Techstars '24), VendorConnect (Techstars '24), TextQL, and Wayo (bootstrapped '24)." },
+  { id:"digreason", group:"industry", label:"Digital Reasoning", dates:"Sep 2015 – Aug 2017", detail:"Senior Data Engineer, client: National Geospatial-Intelligence Agency. Built the object-recognition backbone for an NGA analytics system — Scala/Java on SparkML and Kafka over REST, custom tokenization and knowledge graphs distinguishing vehicles, obstacles, and other objects. Indexed results on a distributed Solr cluster." },
+  { id:"boozallen", group:"industry", label:"Booz Allen Hamilton", dates:"Mar 2014 – Sep 2015", detail:"Data Engineer, DOJ engagement, Herndon VA. Built social-media hypergraph analytics on Accumulo and HDFS in Java, including nearest-neighbor and graph-search routines for investigative analysis. Migrated legacy and Oracle data into Accumulo; stood up the Hadoop ecosystem (YARN, Accumulo, SolrCloud) it ran on. Owned release management." },
+  { id:"missionessential", group:"industry", label:"Mission Essential", dates:"Jan 2017 – Mar 2018", detail:"Linguist. Provided linguistic analysis in a cleared government contracting context." },
+
+  { id:"navy", group:"military", label:"US Navy", dates:"Active 2012–13, Reserves 2013–17", detail:"Information Systems Technician / SIGINT, Beachmaster Unit 2. Managed cryptographic systems and beach communications, and wrote the software used to collect, process, and distribute operational data in the field. Held Top Secret/SCI with CI polygraph." },
+
+  { id:"stonybrook", group:"education", label:"Stony Brook University", dates:"2009 – 2011", detail:"B.S., Applied Mathematics." },
+  { id:"psychoanalysis", group:"education", label:"Psychoanalytic Training", dates:"2022 – 2025", detail:"Coursework across three programs — informs a human-factors, affect-aware lens on the voice-biomarker research." },
+  { id:"intro", group:"education-sub", parent:"psychoanalysis", label:"Introduction Course in Psychoanalysis", dates:"2022 – 2023", detail:"London Institute of Psychoanalysis, with Dr. McMonagle & Pina Antinucci." },
+  { id:"foundation", group:"education-sub", parent:"psychoanalysis", label:"Foundation Course in Psychoanalysis", dates:"2023 – 2024", detail:"London Institute of Psychoanalysis, with Miss Flavia Morante & Dr. Grachev." },
+  { id:"experiential", group:"education-sub", parent:"psychoanalysis", label:"Foundation Course & Experiential Group", dates:"2025", detail:"Philadelphia Association, with Andrea Heath." },
+  { id:"vadom", group:"education-sub", parent:"foundation", label:"VA Domiciliary, Florida", dates:"2023 – 2024", detail:"Volunteer observer. Observed process groups as part of second-year psychoanalytic pre-training." },
+
+  { id:"pub", group:"publications", label:"“The Commodification of the Jester”", dates:"2025", detail:"Philadelphia Association 100th Anniversary volume." },
+
+  { id:"rubicon", group:"additional", label:"Team Rubicon", dates:"Volunteer", detail:"Disaster-relief IT and engineering support." },
+];
+
+const CATEGORY_LINK = "category";
+const TIMELINE_LINK = "timeline";
+const THREAD_LINK = "thread";
+
+const links = [
+  { source:"root", target:"tub", type:CATEGORY_LINK },
+  { source:"root", target:"vbp", type:CATEGORY_LINK },
+  { source:"tub",  target:"vbp", type:CATEGORY_LINK },
+
+  { source:"root", target:"labrador", type:CATEGORY_LINK },
+  { source:"root", target:"fund", type:CATEGORY_LINK },
+  { source:"root", target:"techstars", type:CATEGORY_LINK },
+  { source:"root", target:"digreason", type:CATEGORY_LINK },
+  { source:"root", target:"boozallen", type:CATEGORY_LINK },
+  { source:"root", target:"missionessential", type:CATEGORY_LINK },
+
+  { source:"root", target:"navy", type:CATEGORY_LINK },
+
+  { source:"root", target:"stonybrook", type:CATEGORY_LINK },
+  { source:"root", target:"psychoanalysis", type:CATEGORY_LINK },
+
+  { source:"root", target:"rubicon", type:CATEGORY_LINK },
+
+  { source:"experiential", target:"pub", type:TIMELINE_LINK },
+
+  { source:"navy", target:"boozallen", type:TIMELINE_LINK },
+  { source:"boozallen", target:"digreason", type:TIMELINE_LINK },
+  { source:"digreason", target:"labrador", type:TIMELINE_LINK },
+  { source:"missionessential", target:"jido", type:TIMELINE_LINK },
+
+  { source:"darpa", target:"graphdb", type:THREAD_LINK },
+  { source:"jido", target:"etl", type:THREAD_LINK },
+  { source:"digreason", target:"graphdb", type:THREAD_LINK },
+];
+
+const nodeById = new Map(nodes.map(n => [n.id, n]));
+const RADIUS = { root:22, research:13, industry:13, military:13, education:13, publications:11, additional:10,
+                 "research-sub":9, "industry-sub":9, "education-sub":9 };
+
+const childrenOf = new Map();
+nodes.forEach(n => {
+  if (n.parent) {
+    if (!childrenOf.has(n.parent)) childrenOf.set(n.parent, []);
+    childrenOf.get(n.parent).push(n.id);
+  }
+});
+const expandable = new Set(childrenOf.keys());
+const structureLinks = [];
+childrenOf.forEach((kids, parentId) => kids.forEach(k => structureLinks.push({ source: parentId, target: k, type: CATEGORY_LINK })));
+const allLinks = links.concat(structureLinks);
+
+function colorFor(group){
+  const el = document.createElement("div");
+  el.style.color = GROUP_META[group].color;
+  document.body.appendChild(el);
+  const c = getComputedStyle(el).color;
+  document.body.removeChild(el);
+  return c;
+}
+const RESOLVED_COLOR = {};
+Object.keys(GROUP_META).forEach(g => RESOLVED_COLOR[g] = colorFor(g));
+
+const svg = d3.select("#graph");
+const container = svg.append("g");
+
+svg.call(d3.zoom().scaleExtent([0.25, 3]).on("zoom", (event) => {
+  container.attr("transform", event.transform);
+}));
+
+function size(){ return { w: window.innerWidth, h: window.innerHeight }; }
+let { w, h } = size();
+
+nodeById.get("root").fx = w/2;
+nodeById.get("root").fy = h/2;
+
+let expanded = new Set();
+const activeGroups = new Set(Object.keys(GROUP_META).filter(g => !g.endsWith("-sub")));
+
+function groupFamily(g){
+  if (g === "research-sub") return "research";
+  if (g === "industry-sub") return "industry";
+  if (g === "education-sub") return "education";
+  return g;
+}
+
+function isVisible(id){
+  const n = nodeById.get(id);
+  if (!n) return false;
+  if (n.group !== "root" && !activeGroups.has(groupFamily(n.group))) return false;
+  if (!n.parent) return true;
+  if (!expanded.has(n.parent)) return false;
+  return isVisible(n.parent);
+}
+
+function visibleNodes(){ return nodes.filter(n => isVisible(n.id)); }
+function visibleLinks(){
+  return allLinks.filter(l => {
+    const s = l.source.id || l.source, t = l.target.id || l.target;
+    return isVisible(s) && isVisible(t);
+  });
+}
+
+const linkLayer = container.append("g").attr("class", "links");
+const nodeLayer = container.append("g").attr("class", "nodes");
+let linkSel = linkLayer.selectAll("line");
+let nodeSel = nodeLayer.selectAll("g.node");
+
+const simulation = d3.forceSimulation()
+  .force("link", d3.forceLink().id(d => d.id).distance(l => {
+    if (l.type === THREAD_LINK) return 260;
+    if (l.type === TIMELINE_LINK) return 150;
+    return (l.source.group === "root" || l.source.id === "root") ? 210 : 100;
+  }).strength(l => l.type === THREAD_LINK ? 0.1 : l.type === TIMELINE_LINK ? 0.25 : 0.9))
+  .force("charge", d3.forceManyBody().strength(d => d.group === "root" ? -2600 : -420))
+  .force("center", d3.forceCenter(w/2, h/2))
+  .force("collide", d3.forceCollide().radius(d => (RADIUS[d.group]||10) + 34).strength(1))
+  .alphaDecay(0.02)
+  .on("tick", ticked);
+
+function ticked(){
+  linkSel.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+  nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+}
+
+function render(){
+  const vNodes = visibleNodes();
+  const vLinks = visibleLinks();
+
+  simulation.nodes(vNodes);
+  simulation.force("link").links(vLinks);
+
+  linkSel = linkSel.data(vLinks, d => (d.source.id||d.source) + "→" + (d.target.id||d.target));
+  linkSel.exit().remove();
+  linkSel = linkSel.enter().append("line")
+    .attr("stroke", d => d.type === THREAD_LINK ? RESOLVED_COLOR.root : (d.type === TIMELINE_LINK ? "#5b6472" : RESOLVED_COLOR[nodeById.get(d.target.id||d.target).group]))
+    .attr("stroke-opacity", d => d.type === THREAD_LINK ? 0.45 : d.type === TIMELINE_LINK ? 0.5 : 0.35)
+    .attr("stroke-width", d => d.type === CATEGORY_LINK ? 1.4 : 1.2)
+    .attr("stroke-dasharray", d => d.type === THREAD_LINK ? "2,4" : d.type === TIMELINE_LINK ? "1,5" : null)
+    .merge(linkSel);
+
+  nodeSel = nodeSel.data(vNodes, d => d.id);
+  nodeSel.exit().remove();
+  const nodeEnter = nodeSel.enter().append("g")
+    .attr("class", "node")
+    .style("cursor", "pointer")
+    .call(d3.drag()
+      .on("start", (event, d) => { if (!event.active) simulation.alphaTarget(0.25).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+      .on("end", (event, d) => { if (!event.active) simulation.alphaTarget(0); if (d.id !== "root") { d.fx = null; d.fy = null; } }))
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (expandable.has(d.id)) toggleExpand(d.id);
+      openPanel(d);
+    });
+
+  nodeEnter.append("circle")
+    .attr("r", d => RADIUS[d.group] || 10)
+    .attr("fill", d => d.group === "root" ? RESOLVED_COLOR.root : "#141a22")
+    .attr("stroke", d => RESOLVED_COLOR[d.group])
+    .attr("stroke-width", d => d.group === "root" ? 0 : 2);
+
+  nodeEnter.append("text")
+    .attr("class", d => d.group === "root" ? "node-label root-label" : "node-label")
+    .attr("dy", d => -(RADIUS[d.group]||10) - 8)
+    .attr("text-anchor", "middle")
+    .attr("font-size", d => d.group === "root" ? 14 : (d.group.endsWith("-sub") ? 10.5 : 11.5))
+    .text(d => d.label);
+
+  nodeEnter.append("g").attr("class", "badge");
+
+  nodeSel = nodeEnter.merge(nodeSel);
+
+  nodeSel.select("g.badge").each(function(d){
+    const g = d3.select(this);
+    g.selectAll("*").remove();
+    if (!expandable.has(d.id) || expanded.has(d.id)) return;
+    const r = RADIUS[d.group] || 10;
+    const bx = r * 0.72, by = r * 0.72;
+    g.append("circle").attr("cx", bx).attr("cy", by).attr("r", 8)
+      .attr("fill", "var(--canvas)").attr("stroke", RESOLVED_COLOR[d.group]).attr("stroke-width", 1.4);
+    g.append("text").attr("x", bx).attr("y", by + 3.5).attr("text-anchor", "middle")
+      .attr("font-family", "IBM Plex Mono, monospace").attr("font-size", 9).attr("fill", RESOLVED_COLOR[d.group])
+      .text(childrenOf.get(d.id).length);
+  });
+
+  simulation.alpha(0.7).restart();
+}
+
+function toggleExpand(id){
+  if (expanded.has(id)) collapseSubtree(id); else expanded.add(id);
+  render();
+}
+
+function collapseSubtree(id){
+  expanded.delete(id);
+  (childrenOf.get(id) || []).forEach(childId => { if (expandable.has(childId)) collapseSubtree(childId); });
+}
+
+window.addEventListener("resize", () => {
+  const s = size(); w = s.w; h = s.h;
+  nodeById.get("root").fx = w/2; nodeById.get("root").fy = h/2;
+  simulation.force("center", d3.forceCenter(w/2, h/2));
+  simulation.alpha(0.3).restart();
+});
+
+// ---- legend / filtering ----
+const legend = d3.select("#legend");
+const legendGroups = ["research","industry","military","education","publications","additional"];
+
+legendGroups.forEach(g => {
+  const chip = legend.append("div").attr("class", "chip").attr("data-group", g)
+    .on("click", () => toggleGroup(g));
+  chip.append("span").attr("class", "dot").style("background", RESOLVED_COLOR[g]);
+  chip.append("span").text(GROUP_META[g].label.replace(" — TU Berlin","").replace("Industry & Contracting","Industry").replace("Military Service","Military").replace("Education & Training","Education"));
+});
+
+function toggleGroup(g){
+  if (activeGroups.has(g)) activeGroups.delete(g); else activeGroups.add(g);
+  d3.select(`.chip[data-group="${g}"]`).classed("off", !activeGroups.has(g));
+  render();
+}
+
+// ---- detail panel ----
+const panel = document.getElementById("panel");
+const panelTitle = document.getElementById("panelTitle");
+const panelGroup = document.getElementById("panelGroup");
+const panelDot = document.getElementById("panelDot");
+const panelDates = document.getElementById("panelDates");
+const panelDetail = document.getElementById("panelDetail");
+const panelRel = document.getElementById("panelRel");
+
+function neighborsOf(id){
+  const out = [];
+  allLinks.forEach(l => {
+    const s = l.source.id || l.source, t = l.target.id || l.target;
+    if (s === id) out.push(t);
+    else if (t === id) out.push(s);
+  });
+  return [...new Set(out)];
+}
+
+function relList(container, heading, ids){
+  if (!ids.length) return;
+  const label = document.createElement("p");
+  label.className = "rel-label";
+  label.textContent = heading;
+  container.appendChild(label);
+  const ul = document.createElement("ul");
+  ul.className = "rel-list";
+  ids.forEach(id => {
+    const n = nodeById.get(id);
+    if (!n) return;
+    const li = document.createElement("li");
+    li.textContent = n.label;
+    li.addEventListener("click", () => focusNode(n.id));
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
+}
+
+function openPanel(d){
+  panelTitle.textContent = d.label;
+  panelGroup.textContent = GROUP_META[d.group].label;
+  panelDot.style.background = RESOLVED_COLOR[d.group];
+  panelDates.textContent = d.dates;
+  panelDetail.textContent = d.detail;
+  panelRel.innerHTML = "";
+  if (expandable.has(d.id)) {
+    relList(panelRel, expanded.has(d.id) ? "Contains" : "Contains (collapsed — click node to expand)", childrenOf.get(d.id));
+  }
+  const rel = neighborsOf(d.id).filter(id => !(childrenOf.get(d.id)||[]).includes(id) && id !== d.parent);
+  relList(panelRel, "Connected", rel);
+  if (d.parent) relList(panelRel, "Part of", [d.parent]);
+  panel.classList.add("open");
+}
+
+function focusNode(id){
+  let n = nodeById.get(id);
+  let p = n.parent;
+  while (p) { expanded.add(p); n = nodeById.get(p); p = n.parent; }
+  render();
+  openPanel(nodeById.get(id));
+}
+
+document.getElementById("panelClose").addEventListener("click", () => panel.classList.remove("open"));
+
+// ---- search ----
+const searchInput = document.getElementById("search");
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q) { nodeSel.select("circle").attr("opacity", 1); linkSel.attr("opacity", d => d.type===THREAD_LINK?0.45:d.type===TIMELINE_LINK?0.5:0.35); return; }
+  nodeSel.select("circle").attr("opacity", d => d.label.toLowerCase().includes(q) ? 1 : 0.15);
+  linkSel.attr("opacity", 0.08);
+});
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const q = searchInput.value.trim().toLowerCase();
+    const match = nodes.find(n => n.label.toLowerCase().includes(q));
+    if (match) focusNode(match.id);
+  }
+});
+
+render();
+</script>
+</body>
+</html>
