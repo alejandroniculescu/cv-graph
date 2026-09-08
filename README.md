@@ -5,7 +5,7 @@ the way my own research links words to brain regions. Solid edges are
 category membership, dotted edges trace career sequence, dashed edges mark a
 shared technique across otherwise-unrelated roles.
 
-**[Open the live graph →](https://REPLACE_WITH_USERNAME.github.io/cv-graph/)**
+**[Open the live graph →](https://alejandroniculescu.github.io/cv-graph/)**
 
 Sub-nodes (individual clients under Labrador Data Retrieval, pipeline stages
 under the Voice Biomarker Pipeline, coursework under Psychoanalytic Training)
